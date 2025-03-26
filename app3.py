@@ -1,50 +1,40 @@
-import os
 import streamlit as st
-import fitz  # PyMuPDF for PDFs
-from docx import Document
-import pandas as pd
+import os
+import docx
+import PyPDF2
+from transformers import pipeline
 
-def extract_text(file_path):
-    """Extract text from different file types."""
-    try:
-        if file_path.endswith(".txt"):
-            with open(file_path, "r", encoding="utf-8") as file:
-                return file.read()
-        elif file_path.endswith(".pdf"):
-            doc = fitz.open(file_path)
-            return " ".join([page.get_text() for page in doc])
-        elif file_path.endswith(".docx"):
-            doc = Document(file_path)
-            return " ".join([para.text for para in doc.paragraphs])
-        elif file_path.endswith(".csv"):
-            df = pd.read_csv(file_path)
-            return df.to_string()
-        else:
-            return "Unsupported file type"
-    except Exception as e:
-        return f"Error reading file: {e}"
+summarizer = pipeline("summarization")
 
-def summarize_text(text, max_words=100):
-    """Basic text summarization (extracts first few words)."""
-    words = text.split()
-    return " ".join(words[:max_words])
+def summarize_text(text):
+    return summarizer(text, max_length=150, min_length=50, do_sample=False)[0]['summary_text']
 
-def run():
-    """Streamlit UI for File Summarization."""
-    st.title("📄 File Summarizer")
+def read_file(file_path):
+    if file_path.endswith(".txt"):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    elif file_path.endswith(".docx"):
+        doc = docx.Document(file_path)
+        return "\n".join([para.text for para in doc.paragraphs])
+    elif file_path.endswith(".pdf"):
+        with open(file_path, "rb") as f:
+            pdf_reader = PyPDF2.PdfReader(f)
+            return "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
+    return ""
 
-    uploaded_file = st.file_uploader("Upload a text file:", type=["txt", "docx", "csv", "pdf"])
+def run(st):
+    st.title("📝 AI-Powered File Summarizer")
+    uploaded_file = st.file_uploader("Upload a text, PDF, or DOCX file", type=["txt", "pdf", "docx"])
+
     if uploaded_file:
-        with st.spinner("📄 Processing file..."):
-            file_path = f"temp/{uploaded_file.name}"
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.read())
-
-            text = extract_text(file_path)
-            summary = summarize_text(text)
-
-            st.write("### Summary:")
-            st.write(summary)
-
-if __name__ == "__main__":
-    run()
+        file_text = read_file(uploaded_file.name)
+        if file_text:
+            st.write("### Original Text:")
+            st.text_area("", file_text[:2000], height=300)  # Show first 2000 characters
+            
+            if st.button("Summarize"):
+                summary = summarize_text(file_text)
+                st.success("### Summary:")
+                st.write(summary)
+        else:
+            st.error("Could not read file content.")
