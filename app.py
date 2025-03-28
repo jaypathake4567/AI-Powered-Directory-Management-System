@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import numpy as np
 
 def run(st):
     st.title("📂 AI File Manager")
